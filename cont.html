@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Controle de Projetos Submetidos</title>
+    <!-- Tailwind CSS para estilização rápida e bonita -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome para ícones -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+    
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .selected-card {
+            border-color: #3b82f6;
+            background-color: #eff6ff;
+            color: #1d4ed8;
+            box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.5);
+        }
+        /* Animação suave para o toast de notificação */
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        .toast {
+            animation: slideIn 0.3s ease-out;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 min-h-screen pb-20">
+
+    <!-- Cabeçalho -->
+    <header class="bg-blue-700 text-white p-4 shadow-lg sticky top-0 z-10">
+        <div class="max-w-4xl mx-auto flex justify-between items-center">
+            <div>
+                <h1 class="text-xl font-bold"><i class="fas fa-solar-panel mr-2"></i>Controle de Projetos</h1>
+                <p class="text-xs text-blue-200" id="date-display">Carregando data...</p>
+            </div>
+            <button onclick="manualReset()" class="text-xs bg-blue-800 hover:bg-blue-900 py-1 px-3 rounded transition">
+                <i class="fas fa-trash-alt mr-1"></i> Zerar Dia
+            </button>
+        </div>
+    </header>
+
+    <main class="max-w-4xl mx-auto p-4 space-y-6">
+
+        <!-- Seção de Entrada de Dados -->
+        <div class="bg-white rounded-xl shadow-md p-6 border border-gray-100">
+            <h2 class="text-lg font-semibold mb-4 text-gray-700 border-b pb-2">Novo Registro</h2>
+            
+            <!-- Seleção de Perfil -->
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-600 mb-2">Quem está submetendo?</label>
+                <div class="grid grid-cols-3 gap-3" id="user-options">
+                    <!-- Botões gerados via JS -->
+                </div>
+            </div>
+
+            <!-- Seleção de Concessionária -->
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-600 mb-2">Qual Concessionária?</label>
+                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3" id="concessionaire-options">
+                    <!-- Botões gerados via JS -->
+                </div>
+            </div>
+
+            <!-- Botão de Ação -->
+            <button onclick="submitProject()" 
+                class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-4 rounded-lg shadow-md transform active:scale-95 transition-all duration-200 flex items-center justify-center text-lg">
+                <i class="fas fa-check-circle mr-2"></i> SUBMETER PROJETO
+            </button>
+        </div>
+
+        <!-- Tabela de Resultados -->
+        <div class="bg-white rounded-xl shadow-md p-6 border border-gray-100">
+            <div class="flex justify-between items-center mb-4 border-b pb-2">
+                <h2 class="text-lg font-semibold text-gray-700">Resumo do Dia</h2>
+                <span id="total-count" class="bg-blue-100 text-blue-800 text-xs font-bold px-3 py-1 rounded-full">Total: 0</span>
+            </div>
+            
+            <div class="overflow-x-auto">
+                <table class="min-w-full text-sm text-left">
+                    <thead class="bg-gray-100 text-gray-600 uppercase text-xs">
+                        <tr>
+                            <th class="py-3 px-4 rounded-tl-lg">Concessionária</th>
+                            <th class="py-3 px-4 text-center text-blue-600">Gabriel</th>
+                            <th class="py-3 px-4 text-center text-indigo-600">Weslly</th>
+                            <th class="py-3 px-4 text-center text-purple-600 rounded-tr-lg">Vitor</th>
+                        </tr>
+                    </thead>
+                    <tbody id="stats-table-body" class="divide-y divide-gray-100">
+                        <!-- Linhas da tabela geradas via JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Ações de Compartilhamento -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <button onclick="shareWhatsApp()" class="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-6 rounded-lg shadow transition flex items-center justify-center">
+                <i class="fab fa-whatsapp text-xl mr-2"></i> Enviar no WhatsApp
+            </button>
+            <button onclick="shareEmail()" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-6 rounded-lg shadow transition flex items-center justify-center">
+                <i class="fas fa-envelope text-xl mr-2"></i> Enviar por E-mail
+            </button>
+        </div>
+
+    </main>
+
+    <!-- Container de Toast (Notificações) -->
+    <div id="toast-container" class="fixed bottom-5 right-5 flex flex-col gap-2 z-50"></div>
+
+    <script>
+        // --- Configurações Iniciais ---
+        const users = ['Gabriel', 'Weslly', 'Vitor'];
+        const concessionaires = [
+            'Grupo Neoenergia', 
+            'Energisa PB/SE', 
+            'Equatorial AL/PI', 
+            'Cemig', 
+            'EDP'
+        ];
+
+        // Estado da aplicação
+        let selectedUser = null;
+        let selectedConcessionaire = null;
+        let projectData = {};
+
+        // --- Inicialização ---
+        document.addEventListener('DOMContentLoaded', () => {
+            renderButtons();
+            loadData();
+            updateDateDisplay();
+        });
+
+        // --- Lógica de Dados e Armazenamento ---
+
+        function loadData() {
+            const today = new Date().toLocaleDateString('pt-BR');
+            const storedData = localStorage.getItem('projectTrackerData');
+            const storedDate = localStorage.getItem('projectTrackerDate');
+
+            // Reseta se for um dia novo
+            if (storedDate !== today) {
+                resetData(today);
+            } else if (storedData) {
+                projectData = JSON.parse(storedData);
+                renderTable();
+            } else {
+                resetData(today);
+            }
+        }
+
+        function saveData() {
+            localStorage.setItem('projectTrackerData', JSON.stringify(projectData));
+            localStorage.setItem('projectTrackerDate', new Date().toLocaleDateString('pt-BR'));
+            renderTable();
+        }
+
+        function resetData(dateStr) {
+            projectData = {};
+            // Inicializa estrutura vazia
+            concessionaires.forEach(con => {
+                projectData[con] = {};
+                users.forEach(user => {
+                    projectData[con][user] = 0;
+                });
+            });
+            localStorage.setItem('projectTrackerDate', dateStr);
+            saveData();
+        }
+
+        function manualReset() {
+            if(confirm("Tem certeza que deseja zerar todos os contadores de hoje?")) {
+                resetData(new Date().toLocaleDateString('pt-BR'));
+                showToast("Contadores reiniciados!", "info");
+            }
+        }
+
+        // --- Interface do Usuário ---
+
+        function updateDateDisplay() {
+            const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+            const dateStr = new Date().toLocaleDateString('pt-BR', options);
+            document.getElementById('date-display').textContent = dateStr.charAt(0).toUpperCase() + dateStr.slice(1);
+        }
+
+        function renderButtons() {
+            // Renderiza Usuários
+            const userContainer = document.getElementById('user-options');
+            userContainer.innerHTML = users.map(user => `
+                <button onclick="selectUser('${user}')" id="btn-user-${user}" 
+                    class="border-2 border-gray-200 rounded-lg py-3 px-2 text-sm sm:text-base font-semibold text-gray-600 hover:bg-gray-50 transition w-full">
+                    <i class="fas fa-user-circle mb-1 block text-2xl"></i>
+                    ${user}
+                </button>
+            `).join('');
+
+            // Renderiza Concessionárias
+            const conContainer = document.getElementById('concessionaire-options');
+            conContainer.innerHTML = concessionaires.map(con => `
+                <button onclick="selectConcessionaire('${con}')" id="btn-con-${con.replace(/[^a-zA-Z0-9]/g, '')}" 
+                    class="border-2 border-gray-200 rounded-lg py-3 px-4 text-sm font-medium text-gray-600 hover:bg-gray-50 transition text-left flex items-center">
+                    <div class="w-3 h-3 rounded-full bg-gray-300 mr-2 status-dot"></div>
+                    ${con}
+                </button>
+            `).join('');
+        }
+
+        function selectUser(user) {
+            selectedUser = user;
+            
+            // Atualiza estilos visuais
+            users.forEach(u => {
+                const btn = document.getElementById(`btn-user-${u}`);
+                if (u === user) {
+                    btn.classList.add('selected-card');
+                    btn.classList.remove('border-gray-200', 'text-gray-600');
+                } else {
+                    btn.classList.remove('selected-card');
+                    btn.classList.add('border-gray-200', 'text-gray-600');
+                }
+            });
+        }
+
+        function selectConcessionaire(con) {
+            selectedConcessionaire = con;
+            const safeId = con.replace(/[^a-zA-Z0-9]/g, '');
+
+            // Atualiza estilos visuais
+            concessionaires.forEach(c => {
+                const cSafeId = c.replace(/[^a-zA-Z0-9]/g, '');
+                const btn = document.getElementById(`btn-con-${cSafeId}`);
+                const dot = btn.querySelector('.status-dot');
+                
+                if (c === con) {
+                    btn.classList.add('selected-card');
+                    btn.classList.remove('border-gray-200', 'text-gray-600');
+                    dot.classList.remove('bg-gray-300');
+                    dot.classList.add('bg-blue-500');
+                } else {
+                    btn.classList.remove('selected-card');
+                    btn.classList.add('border-gray-200', 'text-gray-600');
+                    dot.classList.add('bg-gray-300');
+                    dot.classList.remove('bg-blue-500');
+                }
+            });
+        }
+
+        function submitProject() {
+            if (!selectedUser) {
+                showToast("Selecione um perfil (Gabriel, Weslly ou Vitor).", "error");
+                return;
+            }
+            if (!selectedConcessionaire) {
+                showToast("Selecione uma concessionária.", "error");
+                return;
+            }
+
+            // Incrementa contador
+            if (!projectData[selectedConcessionaire]) projectData[selectedConcessionaire] = {};
+            if (!projectData[selectedConcessionaire][selectedUser]) projectData[selectedConcessionaire][selectedUser] = 0;
+            
+            projectData[selectedConcessionaire][selectedUser]++;
+            
+            saveData();
+            showToast(`Projeto salvo: ${selectedUser} - ${selectedConcessionaire}`, "success");
+            
+            // Opcional: Limpar seleção após submeter
+            // selectUser(null); // Descomente se quiser limpar
+            // selectConcessionaire(null); // Descomente se quiser limpar
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('stats-table-body');
+            let html = '';
+            let globalTotal = 0;
+
+            concessionaires.forEach(con => {
+                let rowHtml = `<tr class="hover:bg-gray-50 transition">`;
+                rowHtml += `<td class="py-3 px-4 font-medium text-gray-700 border-b">${con}</td>`;
+                
+                users.forEach(user => {
+                    const count = projectData[con] && projectData[con][user] ? projectData[con][user] : 0;
+                    globalTotal += count;
+                    // Destaca se tiver valor
+                    const style = count > 0 ? 'font-bold bg-blue-50' : 'text-gray-400';
+                    rowHtml += `<td class="py-3 px-4 text-center border-b ${style}">${count}</td>`;
+                });
+
+                rowHtml += `</tr>`;
+                html += rowHtml;
+            });
+
+            tbody.innerHTML = html;
+            document.getElementById('total-count').textContent = `Total do Dia: ${globalTotal}`;
+        }
+
+        // --- Funcionalidades de Compartilhamento ---
+
+        function generateReportText() {
+            const date = new Date().toLocaleDateString('pt-BR');
+            let text = `📋 *Relatório de Projetos - ${date}*\n\n`;
+            
+            let totalDia = 0;
+
+            concessionaires.forEach(con => {
+                let hasData = false;
+                let lineText = `*${con}:* `;
+                let parts = [];
+                
+                users.forEach(user => {
+                    const count = projectData[con][user];
+                    if (count > 0) {
+                        parts.push(`${user}: ${count}`);
+                        totalDia += count;
+                        hasData = true;
+                    }
+                });
+
+                if (hasData) {
+                    text += lineText + parts.join(' | ') + '\n';
+                }
+            });
+
+            text += `\n📊 *Total Geral: ${totalDia} projetos*`;
+            
+            if (totalDia === 0) return null;
+            return text;
+        }
+
+        function shareWhatsApp() {
+            const text = generateReportText();
+            if (!text) {
+                showToast("Nenhum projeto para enviar.", "error");
+                return;
+            }
+            const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
+            window.open(url, '_blank');
+        }
+
+        function shareEmail() {
+            const text = generateReportText();
+            if (!text) {
+                showToast("Nenhum projeto para enviar.", "error");
+                return;
+            }
+            const subject = `Relatório de Projetos - ${new Date().toLocaleDateString('pt-BR')}`;
+            const body = text.replace(/\*/g, ''); // Remove asteriscos do markdown para email
+            const url = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+            window.location.href = url;
+        }
+
+        // --- Utilitários ---
+
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            
+            let colors = type === 'error' ? 'bg-red-500' : (type === 'info' ? 'bg-gray-600' : 'bg-green-600');
+            let icon = type === 'error' ? 'fa-exclamation-circle' : 'fa-check';
+
+            toast.className = `toast ${colors} text-white px-6 py-3 rounded-lg shadow-lg flex items-center min-w-[200px]`;
+            toast.innerHTML = `<i class="fas ${icon} mr-3"></i> ${message}`;
+
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(20px)';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
